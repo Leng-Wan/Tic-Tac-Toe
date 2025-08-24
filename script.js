@@ -1,103 +1,129 @@
-let score_x = document.querySelector("#score-x")
-let score_o = document.querySelector("#score-o")
-let statusEl = document.querySelector(".status")
-let cells = document.querySelectorAll(".cell")
-let reset = document.querySelector(".reset")
-let boardEl = document.querySelector("#board")
-let gameOver = false;
-let board = Array(9).fill(null)
-let currentPlayer = "X"
-let win = [
-    [0,1,2],[3,4,5],[6,7,8], //rows
-    [0,3,6],[1,4,7],[2,5,8], //columns
-    [0,4,8],[2,4,6] //diagonals
-]
-let score = {X:0, O:0}
-function checkWinner()
-{
-    for(const[a,b,c] of win)
-    {
-        if(board[a] && board[a] === board[b] && board[a] === board[c])
-        {
-            return [a,b,c]
-        }
+/***** DOM HOOKS (UI only) *****/
+const scoreX   = document.querySelector("#score-x");
+const scoreO   = document.querySelector("#score-o");
+const statusEl = document.querySelector("#status");
+const boardEl  = document.querySelector("#board");
+const cells    = document.querySelectorAll(".cell");
+const resetBtn = document.querySelector(".reset");
+
+// Creating Game skeleton
+function createGame() {
+  // Private variables
+  let board = Array(9).fill(null);
+  let currentPlayer = "X";
+  let score = { X: 0, O: 0 };
+  let gameOver = false;
+  let winner = null
+  let winLine = null
+
+  const state = () => ({
+    board: [...board],
+    currentPlayer,
+    score: { ...score },
+    gameOver,
+    winLine,
+    winner
+  });
+
+  const LINES = [
+    [0,1,2],[3,4,5],[6,7,8],
+    [0,3,6],[1,4,7],[2,5,8],
+    [0,4,8],[2,4,6]
+  ];
+
+  const checkWinner = (B = board) => {
+    for (const [a, b, c] of LINES) {
+      if (B[a] && B[a] === B[b] && B[a] === B[c]) {
+        return [a, b, c];
+      }
     }
     return null;
+  };
+
+  const play = (i) => {
+    if (gameOver) return state();
+    if (board[i] !== null) return state();
+
+    board[i] = currentPlayer;
+
+    const line = checkWinner();
+    if (line) {
+      gameOver = true;
+      score[currentPlayer] += 1;
+      winner = currentPlayer
+      winLine = line
+      return state();
+    }
+
+    if (board.every(cell => cell !== null)) {
+      gameOver = true;
+      winLine = null
+      winner = null
+      return state()
+    }
+
+    currentPlayer = currentPlayer === "X" ? "O" : "X";
+    return state();
+  };
+
+  const reset = () => {
+    board.fill(null);
+    currentPlayer = "X";
+    gameOver = false;
+    winner = null;      // NEW
+    winLine = null;     // NEW
+    // (Optionally keep or remove score reset line)
+    return state();
+
+  };
+
+  return { state, reset, play };
 }
 
-function endGame(winner,line)
-{
-    gameOver = true
-    statusEl.textContent = `${winner} wins`
-    line.forEach(i =>
-    {
-        cells[i].classList.add("win")
-    }
-    )
-    score[winner]++;
-    score_x.textContent = score.X;
-    score_o.textContent = score.O;
+function render(gameState) {
+  // paint cells
+  cells.forEach((btn, i) => {
+    btn.textContent = gameState.board[i] ?? "";
+    btn.classList.remove("win");
+  });
+
+  // highlight winning line if any
+  if (gameState.winLine) {
+    gameState.winLine.forEach(i => cells[i].classList.add("win"));
+  }
+
+  // status line (single source of truth)
+  if (!gameState.gameOver) {
+    statusEl.textContent = `${gameState.currentPlayer}'s turn`;
+  } else if (gameState.winner) {
+    statusEl.textContent = `${gameState.winner} wins`;
+  } else {
+    statusEl.textContent = "It's a draw";
+  }
+
+  // scores
+  scoreX.textContent = gameState.score.X;
+  scoreO.textContent = gameState.score.O;
 }
-boardEl.addEventListener("click", (e) =>
-{
-    let btn = e.target.closest(".cell")
-    if(!btn)
-        return;
 
-    console.log(btn.dataset.index)
-    if(gameOver)
-    {
-        statusEl.textContent = "Restart"
-        return
-    }
+// build + initial paint
+const game = createGame();
+render(game.state());
 
-    if(!gameOver)
-    {
-        let i = Number(btn.dataset.index)
-        if(board[i] != null)
-            {
-                statusEl.textContent = "Cell already filled"
-                return
-            }
-            
-        cells[i].textContent = currentPlayer // displaying on UI
-        board[i]=currentPlayer //storing in main logic "board"
+// reset
+resetBtn.addEventListener("click", () => {
+  const s = game.reset();
+  render(s);
+});
 
-        //checking winner
-        let line = checkWinner()
-        if(line)
-        {
-            endGame(currentPlayer, line)
-            return;
-        }
-        
-        //check draw
-        if(board.every(cell => cell !==null)) //if(!board.includes(null))
-        {
-            gameOver = true;
-            statusEl.textContent = "It's a draw"
-            return
-        }
+// clicks
+boardEl.addEventListener("click", (e) => {
+  const btn = e.target.closest(".cell");
+  if (!btn) return;
 
-        //switch turn
-        currentPlayer = currentPlayer === 'X'?"O":"X"
-        statusEl.textContent = `${currentPlayer}'s turn`
+  const whichBtn = Number(btn.dataset.index);
+  if (Number.isNaN(whichBtn)) return;
 
-        
-    }
-    
-   
-})
-
-reset.addEventListener("click", function()
-{
-    board.fill(null)
-    gameOver = false
-    currentPlayer = "X"
-    statusEl.textContent = "X's turn.."
-    cells.forEach(c => 
-        {
-            c.textContent = "";
-            c.classList.remove("win")
-        })
-})
+  const next = game.play(whichBtn);
+  render(next);
+});
